@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PCB DFM 在线分析工具</title>
+  <meta name="description" content="轻量化在线PCB可制造性设计分析工具，支持Gerber文件解析、DFM检查、PDF报告生成。">
+  <link rel="icon" href="public/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+
+  <!-- ES Module Import Map - CDN 依赖 (仅JSZip + PDFMake) -->
+  <script type="importmap">
+  {
+    "imports": {
+      "jszip": "https://esm.sh/jszip@3.10.1",
+      "pdfmake": "https://esm.sh/pdfmake@0.2.10",
+      "pdfmake/build/vfs_fonts": "https://esm.sh/pdfmake@0.2.10/build/vfs_fonts"
+    }
+  }
+  </script>
+</head>
+<body id="ui-page" data-ui-desc="页面整体容器">
+
+  <!-- ========== 头部 ========== -->
+  <header class="app-header" id="ui-header" data-ui-desc="顶部导航栏">
+    <div class="app-logo" id="ui-header-title" data-ui-desc="系统名称">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
+        <circle cx="16" cy="8" r="1.5" fill="currentColor"/>
+        <circle cx="8" cy="16" r="1.5" fill="currentColor"/>
+        <circle cx="16" cy="16" r="1.5" fill="currentColor"/>
+        <line x1="8" y1="8" x2="16" y2="16" opacity="0.5"/>
+        <line x1="16" y1="8" x2="8" y2="16" opacity="0.5"/>
+      </svg>
+      <span>PCB DFM 在线分析</span>
+    </div>
+    <div class="header-actions" id="ui-header-actions" data-ui-desc="头部操作按钮区">
+      <button class="btn btn-outline" id="btn-toggle-sidebar" data-ui-desc="切换左侧边栏" title="切换左侧边栏" style="padding:6px 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="6" height="18" rx="1"/><rect x="11" y="3" width="10" height="18" rx="1" opacity="0.3"/></svg></button>
+      <button class="btn btn-outline" id="btn-new" data-ui-desc="新建分析按钮" title="新建分析">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        新建
+      </button>
+      <button class="btn btn-success" id="btn-report" data-ui-desc="生成报告按钮" disabled title="生成DFM分析报告">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        生成报告
+      </button>
+      <button class="btn btn-outline" id="btn-toggle-panel" data-ui-desc="切换右侧面板" title="切换右侧面板" style="padding:6px 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="10" height="18" rx="1" opacity="0.3"/><rect x="15" y="3" width="6" height="18" rx="1"/></svg></button>
+    </div>
+  </header>
+
+  <!-- ========== 主体 ========== -->
+  <div class="app-body">
+
+    <!-- 左侧边栏 -->
+    <aside class="sidebar" id="sidebar" data-ui-desc="左侧导航菜单">
+      <!-- 层列表 -->
+      <div class="sidebar-section" id="ui-sidebar-layers" data-ui-desc="PCB层列表区域"><div class="section-title">PCB 层</div>
+        <ul class="layer-list" id="layer-list">
+          <!-- 动态填充 -->
+        </ul>
+      </div>
+
+      <!-- 规则配置 -->
+      <div class="sidebar-section" id="ui-sidebar-rules" data-ui-desc="DFM检查规则配置区域" style="flex:1; overflow-y:auto;">
+        <div class="section-title">DFM 检查规则</div>
+        <div class="rule-list" id="rule-list">
+          <!-- 动态填充 -->
+        </div>
+      </div>
+
+      <!-- 操作按钮 -->
+      <div class="sidebar-section">
+        <button class="btn btn-primary" id="btn-analyze" data-ui-desc="开始DFM分析按钮" disabled style="width:100%;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          开始 DFM 分析
+        </button>
+      </div>
+    </aside>
+    <div class="resize-handle" id="resize-left"></div>
+
+    <!-- 中间内容区 -->
+    <div class="main-content" id="main-content" data-ui-desc="主内容区域">
+
+      <!-- 上传区 (初始状态) -->
+      <div class="upload-zone" id="upload-zone" data-ui-desc="文件上传区域">
+        <input type="file" id="file-input" multiple accept=".zip,.gbr,.gtl,.gbl,.gbo,.gto,.gbs,.gts,.gko,.gko,.xnc,.drl,.gbo,.gbo,.rou,.gm1,.gdo" style="position:absolute;width:0;height:0;opacity:0;overflow:hidden;pointer-events:none;">
+        <div class="upload-drop-area" id="drop-area" data-ui-desc="拖拽上传区域">
+          <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <div class="upload-title" id="ui-upload-title" data-ui-desc="上传提示标题">拖拽 Gerber 文件到这里</div>
+          <div class="upload-hint">或点击选择文件上传</div>
+          <div class="upload-formats">支持 .zip / .gbr / .gtl / .gbl / .gbo / .gto / .gbs / .gts / .gko / .xnc / .drl 等格式</div>
+        </div>
+      </div>
+
+      <!-- 查看器 (解析后显示) -->
+      <div class="viewer-container" id="viewer-container" data-ui-desc="PCB查看器区域">
+        <!-- 工具栏 -->
+        <div class="viewer-toolbar" id="ui-toolbar" data-ui-desc="查看器工具栏">
+          <button class="btn btn-outline" id="btn-zoom-in" data-ui-desc="放大按钮" title="放大">＋</button>
+          <button class="btn btn-outline" id="btn-zoom-out" data-ui-desc="缩小按钮" title="缩小">－</button>
+          <button class="btn btn-outline" id="btn-zoom-fit" data-ui-desc="适应窗口按钮" title="适应窗口">⊡</button>
+          <span style="color:var(--text-muted); font-size:12px; margin:0 4px;">|</span>
+          <button class="btn btn-outline" id="btn-view-top" data-ui-desc="顶层视图按钮" title="顶层视图" style="font-size:11px;">顶层</button>
+          <button class="btn btn-outline" id="btn-view-bottom" data-ui-desc="底层视图按钮" title="底层视图" style="font-size:11px;">底层</button>
+          <button class="btn btn-outline" id="btn-measure" data-ui-desc="测量距离按钮" title="测量距离" style="font-size:11px;">📏</button>
+        </div>
+
+        <!-- SVG 渲染区 -->
+        <div class="viewer-svg-wrapper" id="svg-wrapper" data-ui-desc="SVG渲染区域">
+          <!-- 动态插入 SVG -->
+        </div>
+      </div>
+
+      <!-- 加载遮罩 -->
+      <div class="loading-overlay" id="loading-overlay" data-ui-desc="加载遮罩层">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loading-text">正在解析 Gerber 文件...</div>
+      </div>
+    </div>
+
+    <div class="resize-handle" id="resize-right"></div>
+    <!-- 右侧面板 (分析结果) -->
+    <div class="right-panel" id="right-panel" data-ui-desc="右侧分析结果面板">
+      <!-- Tab 切换 -->
+      <div class="panel-tabs" id="ui-tabbar" data-ui-desc="选项卡区域">
+        <div class="panel-tab active" data-tab="params" id="ui-tab-1" data-ui-desc="参数列表标签">参数列表</div>
+        <div class="panel-tab" data-tab="dashboard" id="ui-tab-2" data-ui-desc="仪表盘标签">仪表盘</div>
+        <div class="panel-tab" data-tab="violations" id="ui-tab-3" data-ui-desc="违规列表标签">违规列表</div>
+        <div class="panel-tab" data-tab="report" id="ui-tab-4" data-ui-desc="报告标签">报告</div>
+      </div>
+
+      <!-- 参数列表 -->
+      <div class="panel-content" id="tab-params" data-ui-desc="参数列表面板">
+        <div id="params-board-info" style="margin-bottom:12px;"></div>
+        <div id="params-layers" style="margin-bottom:12px;"></div>
+        <div id="params-stats" style="margin-bottom:12px;"></div>
+      </div>
+
+      <!-- 仪表盘 -->
+      <div class="panel-content" id="tab-dashboard" data-ui-desc="仪表盘面板" style="display:none;">
+        <div class="dashboard-summary" id="dashboard-summary" data-ui-desc="DFM分析结果汇总">
+          <div class="summary-card">
+            <div class="summary-count errors" id="count-errors">0</div>
+            <div class="summary-label">错误</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-count warnings" id="count-warnings">0</div>
+            <div class="summary-label">警告</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-count passes" id="count-passes">0</div>
+            <div class="summary-label">通过</div>
+          </div>
+        </div>
+        <div id="rule-results">
+          <!-- 动态填充每个规则的结果 -->
+        </div>
+      </div>
+
+      <!-- 违规列表 -->
+      <div class="panel-content" id="tab-violations" data-ui-desc="违规列表面板" style="display:none;">
+        <div class="violation-list" id="violation-list">
+          <!-- 动态填充 -->
+        </div>
+      </div>
+
+      <!-- 报告配置 -->
+      <div class="panel-content" id="tab-report" data-ui-desc="报告配置面板" style="display:none;">
+        <div class="report-section">
+          <p style="font-size:13px; color:var(--text-secondary); margin-bottom:12px;">
+            生成专业的 DFM 分析 PDF 报告，包含板子概要、层渲染图、违规详情和改进建议。
+          </p>
+          <div class="report-actions">
+            <button class="btn btn-success" id="btn-generate-pdf" data-ui-desc="下载PDF报告按钮" style="flex:1;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              下载 PDF 报告
+            </button>
+          </div>
+          <div style="font-size:12px; color:var(--text-muted);">
+            报告将包含：<br>
+            ✅ 封面与板子概要<br>
+            ✅ PCB 层渲染图<br>
+            ✅ DFM 检查结果汇总表<br>
+            ✅ 每条违规详情与建议<br>
+            ✅ 规则阈值附录
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ========== 状态栏 ========== -->
+  <div class="status-bar" id="ui-statusbar" data-ui-desc="底部状态栏">
+    <span id="status-text">就绪 — 请上传 Gerber 文件开始分析</span>
+    <span id="status-info"></span>
+  </div>
+
+  <!-- Toast 容器 -->
+  <div class="toast-container" id="toast-container" data-ui-desc="消息提示容器"></div>
+
+  <!-- ========== 主入口 ========== -->
+  <script type="module" src="js/app.js"></script>
+
+<script>
+// UI Element Inspector v1.2 — 右键复制 + 修改指令提交 + 悬停联动
+// UI Element Inspector v1.2 — 右键复制 + 修改指令提交 + 悬停联动
+(function(){
+  if(window.__uiInsp) return; window.__uiInsp=1;
+  var hovEl=null, hovId=null, menuHlEl=null, curId=null;
+  var dirH=null;
+  var QF='pending_changes.json';
+
+  function pn(){var t=document.title||'';if(!t){var p=location.pathname;t=p.substring(p.lastIndexOf('/')+1).replace(/\.html?$/i,'')}return t}
+
+  // IndexedDB for persisting directory handle
+  function odb(){return new Promise(function(ok,no){var r=indexedDB.open('uiInsp',1);r.onupgradeneeded=function(){r.result.createObjectStore('h')};r.onsuccess=function(){ok(r.result)};r.onerror=function(){no(r.error)}})}
+  async function svH(h){try{var d=await odb();var t=d.transaction('h','readwrite');t.objectStore('h').put(h,'dir')}catch(e){}}
+  async function ldH(){try{var d=await odb();var t=d.transaction('h','readonly');return new Promise(function(ok){var r=t.objectStore('h').get('dir');r.onsuccess=function(){ok(r.result||null)};r.onerror=function(){ok(null)}})}catch(e){return null}}
+  async function ckP(h){if((await h.queryPermission({mode:'readwrite'}))==='granted')return true;return(await h.requestPermission({mode:'readwrite'}))==='granted'}
+
+  // Write command to queue file
+  async function wCmd(eid,cmd){
+    if(!dirH)return false;
+    try{
+      var fh=await dirH.getFileHandle(QF,{create:true});
+      var f=await fh.getFile();
+      var txt=await f.text();
+      var arr=[];try{arr=JSON.parse(txt)}catch(e){}
+      arr.push({id:Date.now(),fileUrl:location.href,page:pn(),elementId:eid,command:cmd,timestamp:new Date().toISOString(),status:'pending'});
+      var w=await fh.createWritable();
+      await w.write(JSON.stringify(arr,null,2));
+      await w.close();
+      return true;
+    }catch(e){console.error('wCmd:',e);return false}
+  }
+
+  // Restore handle on load
+  (async function(){var h=await ldH();if(h){try{if(await ckP(h))dirH=h}catch(e){}}})();
+
+  // Styles
+  var S=document.createElement('style');
+  S.textContent=
+    '#ui-insp{position:fixed;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.12);z-index:999999;min-width:340px;max-width:500px;display:none;font-family:-apple-system,"PingFang SC",sans-serif;font-size:13px;overflow:hidden}'+
+    '#ui-insp .ih{padding:10px 16px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;font-weight:600;font-size:13px;display:flex;align-items:center;gap:6px}'+
+    '#ui-insp .ir{padding:8px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f1f5f9;transition:background .15s;cursor:default}'+
+    '#ui-insp .ir:hover{background:#f0f4ff}'+
+    '#ui-insp .ia{font-size:11px;color:#94a3b8;min-width:14px}'+
+    '#ui-insp .ic{font-family:"SF Mono",Monaco,Consolas,monospace;background:#eff6ff;color:#3b82f6;padding:2px 8px;border-radius:6px;font-size:12px;white-space:nowrap}'+
+    '#ui-insp .id{color:#64748b;flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'+
+    '#ui-insp .ib{border:1px solid #e2e8f0;background:#f8fafc;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:12px;color:#475569;transition:all .2s;white-space:nowrap;font-family:inherit}'+
+    '#ui-insp .ib:hover{background:#3b82f6;color:#fff;border-color:#3b82f6}'+
+    '#ui-insp .ib.ok{background:#22c55e;color:#fff;border-color:#22c55e}'+
+    '#ui-insp .iarea{padding:10px 12px;border-top:1px solid #e2e8f0;background:#f8fafc}'+
+    '#ui-insp .irow{display:flex;gap:6px;align-items:center}'+
+    '#ui-insp .cmd-in{flex:1;height:32px;border:1px solid #d9d9d9;border-radius:6px;padding:0 10px;font-size:12px;font-family:inherit;outline:none;transition:border-color .2s}'+
+    '#ui-insp .cmd-in:focus{border-color:#667eea;box-shadow:0 0 0 2px rgba(102,126,234,.15)}'+
+    '#ui-insp .cmd-in::placeholder{color:#bfbfbf}'+
+    '#ui-insp .sbtn{height:32px;padding:0 14px;background:#667eea;border:none;border-radius:6px;color:#fff;font-size:12px;cursor:pointer;font-family:inherit;transition:all .2s;white-space:nowrap}'+
+    '#ui-insp .sbtn:hover{background:#5a6fd6}'+
+    '#ui-insp .sbtn:disabled{background:#bfbfbf;cursor:not-allowed}'+
+    '#ui-insp .setup{width:100%;height:34px;border:1px dashed #667eea;background:#f0f0ff;border-radius:6px;color:#667eea;font-size:12px;cursor:pointer;font-family:inherit;transition:all .2s}'+
+    '#ui-insp .setup:hover{background:#e0e0ff}'+
+    '#ui-insp .dir-info{font-size:11px;color:#94a3b8;margin-top:4px}'+
+    '.ui-hl{outline:2px dashed rgba(59,130,246,.5)!important;outline-offset:2px!important;cursor:pointer}'+
+    '.ui-menu-hl{outline:3px solid #f59e0b!important;outline-offset:3px!important;background-color:rgba(245,158,11,0.08)!important;transition:all .15s!important}'+
+    '#ui-tst{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:10px 24px;border-radius:10px;font-size:13px;z-index:999999;opacity:0;transition:opacity .3s;font-family:-apple-system,"PingFang SC",sans-serif;pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,.15)}'+
+    '#ui-tst.s{opacity:1}'+
+    '#ui-hint{position:fixed;top:12px;right:12px;background:rgba(30,41,59,.85);color:#fff;padding:6px 14px;border-radius:8px;font-size:11px;z-index:99999;font-family:-apple-system,sans-serif;backdrop-filter:blur(4px);transition:opacity 1s}';
+  document.head.appendChild(S);
+
+  var M=document.createElement('div'); M.id='ui-insp'; document.body.appendChild(M);
+  var T=document.createElement('div'); T.id='ui-tst'; document.body.appendChild(T);
+  var H=document.createElement('div'); H.id='ui-hint'; H.textContent='💡 悬停高亮 | 右键复制ID | Alt+C 快速复制 | 底部输入修改指令'; document.body.appendChild(H);
+  setTimeout(function(){H.style.opacity='0'},5000); setTimeout(function(){H.remove()},6000);
+
+  function find(e){while(e&&e!==document.body){if(e.id&&e.id.startsWith('ui-'))return e;e=e.parentElement}return null}
+
+  function chain(el){
+    var r=[],c=el,d=0;
+    while(c&&c!==document.body&&d<3){
+      if(c.id&&c.id.startsWith('ui-')){
+        r.push({id:c.id,desc:c.getAttribute('data-ui-desc')||c.tagName.toLowerCase(),tag:c.tagName.toLowerCase()});
+      }
+      c=c.parentElement; d++;
+    }
+    return r;
+  }
+
+  function clearMenuHl(){if(menuHlEl){menuHlEl.classList.remove('ui-menu-hl');menuHlEl=null}}
+
+  function fmtCopy(id){return pn()+' #'+id}
+
+  // Render input area HTML
+  function inputAreaHTML(){
+    if(!window.showDirectoryPicker){
+      return '<div style="font-size:11px;color:#94a3b8;text-align:center;padding:4px 0">🚫 浏览器不支持文件写入，请使用 Chrome/Edge</div>';
+    }
+    if(dirH){
+      return '<div class="irow"><span style="font-size:13px">📝</span>'+
+        '<input class="cmd-in" id="ui-cmd" placeholder="输入修改指令，Enter 提交给 Claude..." />'+
+        '<button class="sbtn" id="ui-sub">提交</button></div>'+
+        '<div class="dir-info">📁 '+dirH.name+'</div>';
+    }
+    return '<button class="setup" id="ui-setup">📁 点击设置项目目录（首次使用，选择 pm_kb 所在目录）</button>';
+  }
+
+  // Right-click menu
+  document.addEventListener('contextmenu',function(e){
+    var el=find(e.target);
+    if(!el||e.target.closest('#ui-insp'))return;
+    e.preventDefault();
+    var items=chain(el);
+    curId=items.length?items[0].id:null;
+    var h='<div class="ih">📋 元素ID层级（悬停定位）</div>';
+    for(var i=0;i<items.length;i++){
+      var it=items[i], arrow=i===0?'▸':'↗';
+      var pad=i>0?'padding-left:'+(16+i*20)+'px;':'';
+      h+='<div class="ir" data-target="'+it.id+'" style="'+pad+'"><span class="ia">'+arrow+'</span><code class="ic">#'+it.id+'</code><span class="id">'+it.desc+'</span><button class="ib" onclick="uiCp(this,\''+it.id+'\')">复制</button></div>';
+    }
+    if(curId){h+='<div class="iarea">'+inputAreaHTML()+'</div>'}
+    M.innerHTML=h; M.style.display='block';
+    var x=Math.min(e.clientX,window.innerWidth-420);
+    var y=Math.min(e.clientY,window.innerHeight-items.length*44-120);
+    M.style.left=Math.max(0,x)+'px'; M.style.top=Math.max(0,y)+'px';
+
+    // Wire up input events
+    var inp=document.getElementById('ui-cmd');
+    if(inp){setTimeout(function(){inp.focus()},100);inp.addEventListener('keydown',function(ev){if(ev.key==='Enter'&&!ev.shiftKey){ev.preventDefault();submitCmd()}})}
+    var sub=document.getElementById('ui-sub');
+    if(sub)sub.addEventListener('click',function(){submitCmd()});
+    var setup=document.getElementById('ui-setup');
+    if(setup)setup.addEventListener('click',doSetup);
+  });
+
+  // Setup directory
+  async function doSetup(){
+    try{
+      var h=await window.showDirectoryPicker({mode:'readwrite'});
+      dirH=h; await svH(h);
+      toast('✅ 目录已设置: '+h.name);
+      // Update input area
+      var area=M.querySelector('.iarea');
+      if(area){
+        area.innerHTML=inputAreaHTML();
+        var inp=document.getElementById('ui-cmd');
+        if(inp){inp.focus();inp.addEventListener('keydown',function(ev){if(ev.key==='Enter'&&!ev.shiftKey){ev.preventDefault();submitCmd()}})}
+        var sub=document.getElementById('ui-sub');
+        if(sub)sub.addEventListener('click',function(){submitCmd()});
+      }
+    }catch(ex){toast('❌ 目录选择已取消')}
+  }
+
+  // Submit command
+  async function submitCmd(){
+    var inp=document.getElementById('ui-cmd');
+    if(!inp||!curId)return;
+    var cmd=inp.value.trim();
+    if(!cmd){toast('❌ 请输入修改指令');return}
+    var sub=document.getElementById('ui-sub');
+    if(sub){sub.disabled=true;sub.textContent='提交中...'}
+    try{
+      if(dirH&&!(await ckP(dirH))){toast('❌ 目录权限被拒绝');if(sub){sub.disabled=false;sub.textContent='提交'}return}
+      var ok=await wCmd(curId,cmd);
+      if(ok){
+        toast('✅ 已提交: #'+curId+' → '+cmd);
+        inp.value='';
+        setTimeout(function(){M.style.display='none';clearMenuHl()},1200);
+      }else{toast('❌ 提交失败');if(sub){sub.disabled=false;sub.textContent='提交'}}
+    }catch(e){toast('❌ 错误: '+e.message);if(sub){sub.disabled=false;sub.textContent='提交'}}
+  }
+
+  // Menu hover highlight
+  M.addEventListener('mouseover',function(e){
+    var row=e.target.closest('.ir');
+    if(row){
+      var tid=row.getAttribute('data-target');
+      var tel=document.getElementById(tid);
+      if(tel){clearMenuHl();tel.classList.add('ui-menu-hl');menuHlEl=tel;tel.scrollIntoView({behavior:'smooth',block:'nearest',inline:'nearest'})}
+    }
+  });
+  M.addEventListener('mouseout',function(e){var row=e.target.closest('.ir');if(row)clearMenuHl()});
+
+  // Close menu
+  document.addEventListener('click',function(e){if(!e.target.closest('#ui-insp')){M.style.display='none';clearMenuHl()}});
+  document.addEventListener('scroll',function(){M.style.display='none';clearMenuHl()},{passive:true});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'){M.style.display='none';clearMenuHl()}});
+
+  // Hover highlight
+  document.addEventListener('mouseover',function(e){
+    var el=find(e.target);
+    if(hovEl&&hovEl!==el)hovEl.classList.remove('ui-hl');
+    if(el){el.classList.add('ui-hl');hovEl=el;hovId=el.id}
+  });
+  document.addEventListener('mouseout',function(e){var el=find(e.target);if(el)el.classList.remove('ui-hl')});
+
+  // Alt+C
+  document.addEventListener('keydown',function(e){
+    if(e.altKey&&e.key.toLowerCase()==='c'){e.preventDefault();if(hovId){cp(fmtCopy(hovId));toast('已复制: '+fmtCopy(hovId))}}
+  });
+
+  // Utils
+  window.uiCp=function(b,id){
+    var text=fmtCopy(id);cp(text);
+    b.textContent='✓ 已复制';b.classList.add('ok');
+    setTimeout(function(){b.textContent='复制';b.classList.remove('ok')},1500);
+  };
+  function cp(t){if(navigator.clipboard){navigator.clipboard.writeText(t)}else{var a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();document.execCommand('copy');a.remove()}}
+  function toast(m){T.textContent=m;T.classList.add('s');setTimeout(function(){T.classList.remove('s')},2000)}
+})();
+</script>
+</body>
+</html>
