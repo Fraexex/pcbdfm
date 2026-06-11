@@ -181,6 +181,59 @@ function renderGerberLayer(layer, group, color) {
         }))
         break
       }
+
+      case 'arc': {
+        // SVG 弧线路径: M startX,startY A rx,ry rotation large-arc-flag sweep-flag endX,endY
+        const w = shape.width || (ap ? ap.width : 0.1)
+        const { cx, cy, radius } = computeSvgArcParams(
+          shape.startX, shape.startY, shape.endX, shape.endY,
+          shape.offsetI, shape.offsetJ
+        )
+
+        // 全圆弧检测（起点=终点）：SVG A 命令无法渲染零长度弧，改用 circle
+        const dx = shape.endX - shape.startX
+        const dy = shape.endY - shape.startY
+        const isFullCircle = Math.abs(dx) < 0.0001 && Math.abs(dy) < 0.0001
+
+        if (isFullCircle) {
+          // 全圆：直接渲染为 SVG circle
+          group.appendChild(createEl('circle', {
+            cx, cy,
+            r: radius,
+            stroke: color.fill,
+            'stroke-width': w,
+            fill: 'none',
+          }))
+        } else {
+          // 正常弧线
+          const dist = Math.sqrt(dx * dx + dy * dy)
+
+          // 计算弧段扫过角度是否 > 180°
+          const startAngle = Math.atan2(shape.startY - cy, shape.startX - cx)
+          const endAngle = Math.atan2(shape.endY - cy, shape.endX - cx)
+          let sweep = endAngle - startAngle
+          if (!shape.clockwise) { // CCW
+            while (sweep < 0) sweep += 2 * Math.PI
+          } else { // CW
+            while (sweep > 0) sweep -= 2 * Math.PI
+          }
+          const isLargeArc = Math.abs(sweep) > Math.PI
+
+          // sweep-flag: 在 Y 翻转组内，Gerber CCW → SVG sweep=1，CW → sweep=0
+          const sweepFlag = shape.clockwise ? 0 : 1
+
+          const d = `M${shape.startX},${shape.startY} A${radius},${radius} 0 ${isLargeArc ? 1 : 0},${sweepFlag} ${shape.endX},${shape.endY}`
+
+          group.appendChild(createEl('path', {
+            d,
+            stroke: color.fill,
+            'stroke-width': w,
+            'stroke-linecap': 'round',
+            fill: 'none',
+          }))
+        }
+        break
+      }
     }
   }
 }
@@ -215,4 +268,15 @@ function createEl(tag, attrs = {}) {
     el.setAttribute(key, val)
   }
   return el
+}
+
+/**
+ * 计算圆弧几何参数（用于 SVG Arc 路径）
+ * @returns {{ cx, cy, radius }}
+ */
+function computeSvgArcParams(startX, startY, endX, endY, offsetI, offsetJ) {
+  const cx = startX + offsetI
+  const cy = startY + offsetJ
+  const radius = Math.max(0.001, Math.sqrt(offsetI * offsetI + offsetJ * offsetJ))
+  return { cx, cy, radius }
 }

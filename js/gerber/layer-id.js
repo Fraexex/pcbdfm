@@ -53,6 +53,22 @@ function manualIdentify(filename) {
     'rou': LAYER_TYPES.OUTLINE,
     // KiCad style
     'cu': LAYER_TYPES.TOP_COPPER,         // 需要上下文判断
+    // Short form (Altium old style, .TOP/.BOT/.TSM/.BSM/.TSLK etc.)
+    'top': LAYER_TYPES.TOP_COPPER,
+    'bot': LAYER_TYPES.BOTTOM_COPPER,
+    'tsm': LAYER_TYPES.TOP_SOLDERMASK,
+    'bsm': LAYER_TYPES.BOTTOM_SOLDERMASK,
+    'tss': LAYER_TYPES.TOP_SILKSCREEN,
+    'bss': LAYER_TYPES.BOTTOM_SILKSCREEN,
+    'tslk': LAYER_TYPES.TOP_SILKSCREEN,
+    'bslk': LAYER_TYPES.BOTTOM_SILKSCREEN,
+    'ssk': LAYER_TYPES.TOP_SILKSCREEN,
+    'brd': LAYER_TYPES.OUTLINE,
+    'brd': LAYER_TYPES.OUTLINE,
+    'ncd': LAYER_TYPES.DRILL,
+    'nc': LAYER_TYPES.DRILL,
+    'drd': LAYER_TYPES.DRILL,
+    'rep': null,                           // Report file, not a PCB layer
   }
 
   if (extMap[ext]) {

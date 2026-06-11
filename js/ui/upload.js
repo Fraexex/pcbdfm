@@ -127,8 +127,9 @@ function isGerberFile(filename) {
   const gerberExts = [
     'gbr', 'gtl', 'gbl', 'gbo', 'gto', 'gbs', 'gts', 'gko',
     'gml', 'gm1', 'gdo', 'gdd', 'xnc', 'drl', 'rou',
-    'top', 'bot', 'smt', 'smb', 'sst', 'ssb', 'out', 'outline',
-    'phd', 'dri', 'rep', 'crc',
+    'top', 'bot', 'tsm', 'bsm', 'tss', 'bss', 'tslk', 'bslk',
+    'smt', 'smb', 'sst', 'ssb', 'brd', 'ncd', 'nc',
+    'out', 'outline', 'phd', 'dri', 'crc',
   ]
   // 也检查文件名中常见的 Gerber 关键字
   const gerberNames = [
