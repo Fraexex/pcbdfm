@@ -213,7 +213,7 @@ export async function generatePdfReport(data) {
       },
       subtitle: {
         fontSize: 12,
-        color: '#666666',
+        color: '#676767',
         margin: [0, 0, 0, 8],
       },
       sectionTitle: {
