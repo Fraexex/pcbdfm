@@ -34,6 +34,23 @@ function nextId() {
   return `v_${++violationCounter}`
 }
 
+function evaluateTolerance(actual, min, tolerance) {
+  if (actual < min) {
+    return { severity: SEVERITY.ERROR, delta: actual - min }
+  }
+
+  if (actual < min + tolerance) {
+    return { severity: SEVERITY.WARNING, delta: actual - min }
+  }
+  
+  return { severity: null, delta: actual - min }
+}
+
+function getTol(settings, key, defaultTol) {
+  if (!settings.strictMode) return 0
+  return settings[`${key}Tolerance`] ?? defaultTol
+}
+
 // ==========================================
 // 规则 1: 最小线宽
 // ==========================================
@@ -55,7 +72,13 @@ export function checkTraceWidth(ctx) {
     const effectiveThresholdMm = milToMm(effectiveThreshold)
 
     for (const trace of traces) {
-      if (trace.width > 0 && trace.width < effectiveThresholdMm) {
+      const tol = getTol(ctx.settings, 'traceWidth', milToMm(0.5))
+      const result = evaluateTolerance(
+        trace.width,
+        effectiveThresholdMm,
+        tol
+      )
+      if (result.severity) {
         const midX = (trace.startX + trace.endX) / 2
         const midY = (trace.startY + trace.endY) / 2
         violations.push({
@@ -95,8 +118,10 @@ export function checkTraceClearance(ctx) {
     const maxChecks = Math.min(traces.length, 500) // 限制检查数量防止性能问题
     for (let i = 0; i < maxChecks; i++) {
       for (let j = i + 1; j < maxChecks; j++) {
+        const tol = getTol(ctx.settings, 'traceClearance', milToMm(0.5))
+        const result = evaluateTolerance(dist, thresholdMm, tol)
         const dist = segmentDistance(traces[i], traces[j])
-        if (dist > 0 && dist < thresholdMm) {
+        if (dist > 0 && result.severity) {
           violations.push({
             id: nextId(),
             ruleId: 'trace-clearance',
@@ -130,7 +155,9 @@ export function checkDrillHoleSize(ctx) {
 
       const holes = extractDrillHolesFromContent(layer.content)
       for (const hole of holes) {
-        if (hole.diameter > 0 && hole.diameter < thresholdMm) {
+        const tol = getTol(ctx.settings, 'drillHoleSize', milToMm(0.2))
+        const result = evaluateTolerance(hole.diameter, thresholdMm, tol)
+        if (hole.diameter > 0 && result.severity) {
           violations.push({
             id: nextId(),
             ruleId: 'drill-hole-size',
@@ -171,9 +198,15 @@ export function checkAnnularRing(ctx) {
     // 如果没有 pad 数据，使用典型值估算
     const typicalPadDiameter = hole.diameter + 2 * thresholdMm
     const annularRing = (typicalPadDiameter - hole.diameter) / 2
+    const tol = getTol(ctx.settings, 'annularRing', milToMm(0.5))
+    const result = evaluateTolerance(
+      annularRing,
+      thresholdMm,
+      tol
+    )
 
     // 如果焊盘太小（直径接近钻孔），报告问题
-    if (annularRing < thresholdMm && annularRing > 0) {
+    if (result.severity && annularRing > 0) {
       violations.push({
         id: nextId(),
         ruleId: 'annular-ring',

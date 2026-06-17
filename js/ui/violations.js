@@ -31,6 +31,7 @@ export function renderViolationList(violations, container, onItemClick) {
 
   for (const v of sorted) {
     const card = document.createElement('div')
+    const isWarning = v.severity === 'warning'
     card.className = `violation-card severity-${v.severity}`
     card.setAttribute('data-violation-id', v.id)
 
@@ -41,6 +42,7 @@ export function renderViolationList(violations, container, onItemClick) {
       </div>
       <div class="violation-message">${v.message}</div>
       ${v.suggestion ? `<div class="violation-message" style="margin-top:4px; color:var(--accent-blue); font-size:11px;">💡 ${v.suggestion}</div>` : ''}
+      ${isWarning  ? `<div style="font-size:10px;color:var(--accent-yellow);margin-top:2px;">接近工艺极限 (tolerance risk)</div>` : ''}
       ${v.location ? `<div class="violation-location">📍 (${v.location.x.toFixed(2)}, ${v.location.y.toFixed(2)})</div>` : ''}
     `
 

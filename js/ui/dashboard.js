@@ -422,6 +422,27 @@ export function renderLayerList(layers, container, onToggle) {
 export function renderRuleConfig(settings, container, onChange, onPresetChange, currentPreset) {
   container.innerHTML = ''
 
+  // Strict mode toggle
+  const strictRow = document.createElement('div')
+  strictRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:12px;'
+
+  const strictLabel = document.createElement('span')
+  strictLabel.textContent = '严格模式'
+  strictLabel.style.color = 'var(--text-secondary)'
+
+  const strictToggle = document.createElement('input')
+  strictToggle.type = 'checkbox'
+  strictToggle.checked = settings.strictMode || false
+
+  strictToggle.addEventListener('change', () => {
+    if (onChange) onChange('strictMode', strictToggle.checked)
+  })
+
+  strictRow.appendChild(strictLabel)
+  strictRow.appendChild(strictToggle)
+  container.appendChild(strictRow)
+
+
   // Preset selector
   const presetNames = Object.keys(MANUFACTURER_PRESETS)
   const presetRow = document.createElement('div')
@@ -446,11 +467,11 @@ export function renderRuleConfig(settings, container, onChange, onPresetChange, 
   container.appendChild(presetRow)
 
   const rules = [
-    { id: 'traceWidth', name: '最小线宽', unit: 'mil', default: 4 },
+    { id: 'traceWidth', name: '最小线宽', unit: 'mil', default: 4, tol: 'traceWidthTolerance', tolDefault: 0.5 },
     { id: 'traceWidthInner', name: '内层最小线宽', unit: 'mil', default: 3 },
-    { id: 'traceClearance', name: '线距/铜间距', unit: 'mil', default: 6 },
-    { id: 'drillHoleSize', name: '最小钻孔尺寸', unit: 'mil', default: 6 },
-    { id: 'annularRing', name: '焊盘环宽', unit: 'mil', default: 5 },
+    { id: 'traceClearance', name: '线距/铜间距', unit: 'mil', default: 6, tol: 'traceClearanceTolerance', tolDefault: 0.5 },
+    { id: 'drillHoleSize', name: '最小钻孔尺寸', unit: 'mil', default: 6, tol: 'drillHoleSizeTolerance', tolDefault: 0.2 },
+    { id: 'annularRing', name: '焊盘环宽', unit: 'mil', default: 5, tol: 'annularRingolerance', tolDefault: 0.5 },
     { id: 'soldermaskWeb', name: '阻焊桥宽度', unit: 'mil', default: 4 },
     { id: 'copperToEdge', name: '铜皮到板边距', unit: 'mil', default: 10 },
   ]
@@ -459,15 +480,30 @@ export function renderRuleConfig(settings, container, onChange, onPresetChange, 
     const div = document.createElement('div')
     div.className = 'rule-item'
 
-    const currentValue = settings[rule.id] || rule.default
+    const currentValue = settings[rule.id] ?? rule.default
+    const tolVal = rule.tol ? (settings[rule.tol] ?? rule.tolDefault) : null
 
     div.innerHTML = `
-      <span class="rule-name">${rule.name}</span>
-      <span>
-        <input type="number" class="rule-input" value="${currentValue}" min="0" step="0.5" data-rule="${rule.id}">
-        <span class="rule-unit">${rule.unit}</span>
-      </span>
-    `
+      <div style="display:flex;justify-content:space-between;">
+        <span class="rule-name">${rule.name}</span>
+        <span>
+          <input type="number" class="rule-input" value="${val}" step="0.5" data-rule="${rule.id}">
+          <span class="rule-unit">${rule.unit}</span>
+        </span>
+    </div>
+
+    ${
+      rule.tol ? `
+        <div style="margin-top:4px; display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);">
+          <span>容差 ±</span>
+          <span>
+            <input type="number" class="rule-tol" value="${tolVal}" step="0.1" data-rule="${rule.tol}">
+            <span class="rule-unit">${rule.unit}</span>
+          </span>
+        </div>
+      ` : ''
+    }
+  `
 
     const input = div.querySelector('.rule-input')
     input.addEventListener('change', () => {
@@ -476,6 +512,16 @@ export function renderRuleConfig(settings, container, onChange, onPresetChange, 
         if (onChange) onChange(rule.id, val)
       }
     })
+
+    const tolInput = div.querySelector('.rule-tol')
+    if (tolInput) {
+      tolInput.addEventListener('change', () => {
+        const val = parseFloat(tolInput.value)
+        if (!isNaN(val) && val >= 0) {
+          if (onChange) onChange(rule.tol, val)
+        }
+      })
+    }
 
     container.appendChild(div)
   }
